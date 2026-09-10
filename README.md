@@ -67,3 +67,26 @@ cdwork
 ```
 
 Configure the work directory by editing `~\cmds\.dotfiles\.cdwork` — put the full path on a single line. Lines starting with `#` are ignored.
+
+## Claude Code status line
+
+`scripts\claude-statusline.ps1` renders a Claude Code status line showing the working directory, active model, git branch, context window usage, and current date/time. The model and context fields only appear once Claude Code has sent that data (they're absent on the very first render of a session).
+
+To enable it, add this to `~\.claude\settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "pwsh -NoProfile -File C:/Users/<you>/cmds/scripts/claude-statusline.ps1",
+    "refreshInterval": 15
+  }
+}
+```
+
+Fully quit and relaunch `claude` afterward — the `statusLine` setting is only read at startup.
+
+**Windows gotchas:**
+
+- Claude Code runs `statusLine` commands through Git Bash when it's installed, and Git Bash treats unquoted backslashes as escape characters. A `command` path written with backslashes (e.g. `C:\Users\...\claude-statusline.bat`) gets silently mangled and the status line never appears, with no visible error. Always use forward slashes in the `command` path, as shown above.
+- When `pwsh -File` is invoked from a Git Bash pipe (as Claude Code does here), `[Console]::In.ReadToEnd()` does not see the piped JSON even though the pipe is real — it silently reads empty. The script reads stdin via the `$input` pipeline variable instead, which works in both this piped scenario and when the script is run standalone by hand.
