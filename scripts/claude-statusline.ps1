@@ -5,32 +5,32 @@
 
 $e = [char]27
 $bel = [char]7
-function Color([string]$code, [string]$text) { "$e[${code}m$text$e[0m" }
+function Format-ColorText([string]$Code, [string]$Text) { "$e[${Code}m$Text$e[0m" }
 
-# OSC 8 hyperlink: wraps $text so terminals like Windows Terminal make it Ctrl+clickable.
-function Hyperlink([string]$uri, [string]$text) { "$e]8;;$uri$bel$text$e]8;;$bel" }
+# OSC 8 hyperlink: wraps $Text so terminals like Windows Terminal make it Ctrl+clickable.
+function Format-Hyperlink([string]$Uri, [string]$Text) { "$e]8;;$Uri$bel$Text$e]8;;$bel" }
 
-# Length of $text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
+# Length of $Text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
 # hyperlink wrappers stripped out (they take zero columns). Used to wrap segments onto
 # additional lines by real width rather than by raw string length.
-function VisibleLength([string]$text) {
-    $stripped = $text -replace "$e\]8;;[^$bel]*$bel", ''
+function Get-VisibleLength([string]$Text) {
+    $stripped = $Text -replace "$e\]8;;[^$bel]*$bel", ''
     $stripped = $stripped -replace "$e\[[0-9;]*m", ''
     return $stripped.Length
 }
 
 # Percent-encode each '/'-separated segment of a URI path independently, so the slashes
 # themselves stay literal instead of becoming %2F.
-function EncodeUriPathSegments([string]$path) {
-    return ($path -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+function ConvertTo-EncodedUriPath([string]$Path) {
+    return ($Path -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
 }
 
 # Convert a Windows filesystem path to a file:// URI, percent-encoding unsafe characters
 # while preserving the drive-letter colon and path separators.
-function ToFileUri([string]$path) {
-    if (-not $path) { return $null }
-    $forward = ($path -replace '\\', '/').TrimEnd('/')
-    $encoded = EncodeUriPathSegments $forward
+function ConvertTo-FileUri([string]$Path) {
+    if (-not $Path) { return $null }
+    $forward = ($Path -replace '\\', '/').TrimEnd('/')
+    $encoded = ConvertTo-EncodedUriPath $forward
     # ':' is illegal in Windows filenames except after a drive letter, so restoring it
     # from EscapeDataString's %3A everywhere is safe and keeps "C:" readable in the URI.
     $encoded = $encoded -replace '%3A', ':'
@@ -40,37 +40,37 @@ function ToFileUri([string]$path) {
 # Build a link to a model's page on platform.claude.com from its API id, e.g.
 # "claude-sonnet-5" -> sonnet-5, "claude-haiku-4-5-20251001" -> haiku-4-5 (date suffix
 # stripped). Falls back to the general models overview when there's no id to work from.
-function ToModelUrl([string]$modelId) {
-    if (-not $modelId) { return 'https://platform.claude.com/docs/en/models/overview' }
-    $slug = ($modelId -replace '^claude-', '') -replace '-\d{8}$', ''
+function ConvertTo-ModelUrl([string]$ModelId) {
+    if (-not $ModelId) { return 'https://platform.claude.com/docs/en/models/overview' }
+    $slug = ($ModelId -replace '^claude-', '') -replace '-\d{8}$', ''
     return "https://platform.claude.com/docs/en/models/$slug/overview"
 }
 
 # Build a link to a branch's page on github.com from the repo's origin remote. Returns
 # $null when there's no branch or remote, or the remote isn't a github.com URL — a link
 # to a branch's page only makes sense there, not on other git hosts.
-function ToGitHubBranchUrl([string]$repoDir, [string]$branchName) {
-    if (-not $branchName) { return $null }
-    $remote = git -C $repoDir config --get remote.origin.url 2>$null
+function ConvertTo-GitHubBranchUrl([string]$RepoDir, [string]$BranchName) {
+    if (-not $BranchName) { return $null }
+    $remote = git -C $RepoDir config --get remote.origin.url 2>$null
     if (-not $remote) { return $null }
     $httpsUrl = ($remote -replace '^git@github\.com:', 'https://github.com/') -replace '\.git$', ''
     if ($httpsUrl -notmatch '^https://github\.com/') { return $null }
-    $encodedBranch = EncodeUriPathSegments $branchName
+    $encodedBranch = ConvertTo-EncodedUriPath $BranchName
     return "$httpsUrl/tree/$encodedBranch"
 }
 
 # Collapse the user's home directory prefix to "~", tolerating either slash style.
-function CollapseHome([string]$path) {
-    if (-not $path) { return $path }
+function Format-HomePath([string]$Path) {
+    if (-not $Path) { return $Path }
     $homePath = $env:USERPROFILE
-    if (-not $homePath) { return $path }
-    $normPath = $path.TrimEnd('\', '/') -replace '/', '\'
+    if (-not $homePath) { return $Path }
+    $normPath = $Path.TrimEnd('\', '/') -replace '/', '\'
     $normHome = $homePath.TrimEnd('\', '/') -replace '/', '\'
     if ($normPath -ieq $normHome) { return '~' }
     if ($normPath.StartsWith("$normHome\", [System.StringComparison]::OrdinalIgnoreCase)) {
-        return '~' + $path.Substring($normHome.Length)
+        return '~' + $Path.Substring($normHome.Length)
     }
-    return $path
+    return $Path
 }
 
 # Claude Code pipes a JSON object on stdin; fall back to the real cwd when run by hand.
@@ -105,37 +105,37 @@ $now = Get-Date
 # Folder symbol (yellow) + path (bright cyan), with the home directory collapsed to ~.
 # The path is an OSC 8 hyperlink to a file:// URI, so Ctrl+click opens it in File Explorer
 # on terminals that support clickable links (e.g. Windows Terminal).
-$dirText = Color '96' (CollapseHome $projectDir)
-$dirUri = ToFileUri $projectDir
-if ($dirUri) { $dirText = Hyperlink $dirUri $dirText }
-$dir = (Color '33' '📁') + ' ' + $dirText
+$dirText = Format-ColorText '96' (Format-HomePath $projectDir)
+$dirUri = ConvertTo-FileUri $projectDir
+if ($dirUri) { $dirText = Format-Hyperlink $dirUri $dirText }
+$dir = (Format-ColorText '33' '📁') + ' ' + $dirText
 
 # Clock symbol (green) + date/time (bright magenta)
-$time = (Color '32' '🕒') + ' ' + (Color '95' $now.ToString('yyyy-MM-dd HH:mm:ss'))
+$time = (Format-ColorText '32' '🕒') + ' ' + (Format-ColorText '95' $now.ToString('yyyy-MM-dd HH:mm:ss'))
 
-$sep = Color '90' ' | '
+$sep = Format-ColorText '90' ' | '
 $segments = @($dir)
 
 # Model symbol (bright blue) — only when Claude Code supplied it. Links to the model's
 # page on platform.claude.com.
 if ($model) {
-    $modelText = Hyperlink (ToModelUrl $modelId) (Color '94' $model)
-    $segments += (Color '94' '🤖') + ' ' + $modelText
+    $modelText = Format-Hyperlink (ConvertTo-ModelUrl $modelId) (Format-ColorText '94' $model)
+    $segments += (Format-ColorText '94' '🤖') + ' ' + $modelText
 }
 
 # Git branch symbol (bright green) — only when cwd is a repo. Links to the branch on
 # github.com when the repo's origin remote is a GitHub URL.
 $branch = git -C $cwd rev-parse --abbrev-ref HEAD 2>$null
 if ($LASTEXITCODE -eq 0 -and $branch) {
-    $branchText = Color '92' $branch
-    $branchUrl = ToGitHubBranchUrl $cwd $branch
-    if ($branchUrl) { $branchText = Hyperlink $branchUrl $branchText }
-    $segments += (Color '92' '🌿') + ' ' + $branchText
+    $branchText = Format-ColorText '92' $branch
+    $branchUrl = ConvertTo-GitHubBranchUrl $cwd $branch
+    if ($branchUrl) { $branchText = Format-Hyperlink $branchUrl $branchText }
+    $segments += (Format-ColorText '92' '🌿') + ' ' + $branchText
 }
 
 # Context usage symbol (bright yellow) — only when Claude Code supplied it
 if ($null -ne $ctxPct) {
-    $segments += (Color '93' '📊') + ' ' + (Color '93' "$ctxPct% ctx")
+    $segments += (Format-ColorText '93' '📊') + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
 }
 
 $segments += $time
@@ -149,13 +149,13 @@ $parsedColumns = 0
 if ([int]::TryParse($env:COLUMNS, [ref]$parsedColumns) -and $parsedColumns -gt 0) {
     $columns = $parsedColumns
 }
-$sepWidth = VisibleLength $sep
+$sepWidth = Get-VisibleLength $sep
 
 $lines = @()
 $currentSegments = @()
 $currentWidth = 0
 foreach ($seg in $segments) {
-    $segWidth = VisibleLength $seg
+    $segWidth = Get-VisibleLength $seg
     $addedWidth = if ($currentSegments.Count -eq 0) { $segWidth } else { $segWidth + $sepWidth }
     if ($currentSegments.Count -gt 0 -and ($currentWidth + $addedWidth) -gt $columns) {
         $lines += ($currentSegments -join $sep)
