@@ -1,0 +1,12 @@
+{
+  "name": "cmds",
+  "owner": { "name": "Nate314" },
+  "description": "Nate314's personal Claude Code plugins",
+  "plugins": [
+    {
+      "name": "cmds",
+      "source": "./plugins/cmds",
+      "description": "Utility commands: notifywhen background condition watcher"
+    }
+  ]
+}
