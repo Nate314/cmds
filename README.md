@@ -2,6 +2,13 @@
 
 A personal collection of system-wide CLI commands. Add `~\cmds` to your `PATH` and use these commands from any terminal.
 
+## Prerequisites
+
+- **[PowerShell 7+ (pwsh)](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows)** — required. Every command's `.bat` file launches its script with `pwsh`, not Windows PowerShell (`powershell.exe`) or cmd.exe alone.
+- **[Git for Windows](https://git-scm.com/download/win)** — optional. Without it, the Claude Code status line just omits the git branch segment; everything else works fine.
+- **[Windows Terminal](https://aka.ms/terminal)** — recommended. The status line's clickable folder/model/branch links (OSC 8 hyperlinks) need a terminal that supports them; older consoles show the plain text instead.
+- **[Claude Code](https://claude.com/claude-code)** — only needed if you want the status line feature; the other commands don't depend on it.
+
 ## Setup
 
 Add the `cmds` directory to your system PATH:
