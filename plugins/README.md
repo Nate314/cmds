@@ -20,9 +20,11 @@ Utility commands for the cmds repo.
 #### `/cmds:notifywhen "<condition>" "<url>" "<message>" ["<interval>"]`
 
 Polls a natural-language condition against a URL in the background (default
-interval: 5 minutes) and, once it becomes true, pops a kiosk-mode Chrome
-window showing your message with a clickable link to the URL. Runs
-detached, so it survives closing the Claude Code session or terminal.
+interval: 5 minutes) and, once it becomes true, pops a small Chrome app
+window with a chime, showing your message and a clickable link to the URL.
+Clicking the link opens it in your actual OS default browser (not just
+inside that Chrome window). Runs detached, so it survives closing the
+Claude Code session or terminal.
 
 Example:
 
@@ -43,9 +45,9 @@ page content.
 
 #### `/cmds:notifywhen-list`
 
-Lists currently active watchers (still polling, or already showing a kiosk
-notification waiting to be closed), with their id, status, condition, url,
-and start time.
+Lists currently active watchers (still polling, or already showing a
+notification window waiting to be closed), with their id, status,
+condition, url, and start time.
 
 #### `/cmds:notifywhen-stop "<id-or-'all'>"`
 

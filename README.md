@@ -88,8 +88,8 @@ cmds
 
 This repo also publishes a Claude Code plugin marketplace — see
 [`plugins/README.md`](plugins/README.md) for installation and the
-`notifywhen` command family (background condition watcher with a kiosk
-notification).
+`notifywhen` command family (background condition watcher with a windowed
+chime notification).
 
 ## Claude Code status line
 
