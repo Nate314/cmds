@@ -19,12 +19,18 @@ function VisibleLength([string]$text) {
     return $stripped.Length
 }
 
+# Percent-encode each '/'-separated segment of a URI path independently, so the slashes
+# themselves stay literal instead of becoming %2F.
+function EncodeUriPathSegments([string]$path) {
+    return ($path -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+}
+
 # Convert a Windows filesystem path to a file:// URI, percent-encoding unsafe characters
 # while preserving the drive-letter colon and path separators.
 function ToFileUri([string]$path) {
     if (-not $path) { return $null }
     $forward = ($path -replace '\\', '/').TrimEnd('/')
-    $encoded = ($forward -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+    $encoded = EncodeUriPathSegments $forward
     # ':' is illegal in Windows filenames except after a drive letter, so restoring it
     # from EscapeDataString's %3A everywhere is safe and keeps "C:" readable in the URI.
     $encoded = $encoded -replace '%3A', ':'
@@ -40,16 +46,16 @@ function ToModelUrl([string]$modelId) {
     return "https://platform.claude.com/docs/en/models/$slug/overview"
 }
 
-# Build a link to a branch's page on github.com from the repo's origin remote.
-# Returns $null when there's no branch, no remote, or the remote isn't github.com,
-# since the request was specifically to open the branch on github.com.
+# Build a link to a branch's page on github.com from the repo's origin remote. Returns
+# $null when there's no branch or remote, or the remote isn't a github.com URL — a link
+# to a branch's page only makes sense there, not on other git hosts.
 function ToGitHubBranchUrl([string]$repoDir, [string]$branchName) {
     if (-not $branchName) { return $null }
     $remote = git -C $repoDir config --get remote.origin.url 2>$null
     if (-not $remote) { return $null }
     $httpsUrl = ($remote -replace '^git@github\.com:', 'https://github.com/') -replace '\.git$', ''
     if ($httpsUrl -notmatch '^https://github\.com/') { return $null }
-    $encodedBranch = ($branchName -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+    $encodedBranch = EncodeUriPathSegments $branchName
     return "$httpsUrl/tree/$encodedBranch"
 }
 
