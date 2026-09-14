@@ -70,7 +70,7 @@ Configure the work directory by editing `~\cmds\.dotfiles\.cdwork` — put the f
 
 ## Claude Code status line
 
-`scripts\claude-statusline.ps1` renders a Claude Code status line showing the working directory, active model, git branch, context window usage, and current date/time. The model and context fields only appear once Claude Code has sent that data (they're absent on the very first render of a session).
+`scripts\claude-statusline.ps1` renders a Claude Code status line showing the session's launch directory, active model, git branch, context window usage, and current date/time. The model and context fields only appear once Claude Code has sent that data (they're absent on the very first render of a session). The folder shown is `workspace.project_dir` (where the session was launched from), not `workspace.current_dir` (the live working directory) — so it stays put even after Claude `cd`s elsewhere internally; the git branch still reflects wherever the session currently is. A `%USERPROFILE%` prefix on the shown folder is collapsed to `~` (e.g. `C:\Users\you\cmds` → `~\cmds`). The folder is also an OSC 8 hyperlink to a `file://` URI, so Ctrl+click (Cmd+click on macOS) opens it in File Explorer on terminals that support clickable links, such as Windows Terminal.
 
 To enable it, add this to `~\.claude\settings.json`:
 
