@@ -3,12 +3,7 @@
 # Emit UTF-8 so the symbol glyphs survive when Claude Code captures stdout.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$e = [char]27
-$bel = [char]7
-function Format-ColorText([string]$Code, [string]$Text) { "$e[${Code}m$Text$e[0m" }
-
-# OSC 8 hyperlink: wraps $Text so terminals like Windows Terminal make it Ctrl+clickable.
-function Format-Hyperlink([string]$Uri, [string]$Text) { "$e]8;;$Uri$bel$Text$e]8;;$bel" }
+. (Join-Path $PSScriptRoot '_common.ps1')
 
 # Length of $Text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
 # hyperlink wrappers stripped out (they take zero columns). Used to wrap segments onto
@@ -17,24 +12,6 @@ function Get-VisibleLength([string]$Text) {
     $stripped = $Text -replace "$e\]8;;[^$bel]*$bel", ''
     $stripped = $stripped -replace "$e\[[0-9;]*m", ''
     return $stripped.Length
-}
-
-# Percent-encode each '/'-separated segment of a URI path independently, so the slashes
-# themselves stay literal instead of becoming %2F.
-function ConvertTo-EncodedUriPath([string]$Path) {
-    return ($Path -split '/' | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
-}
-
-# Convert a Windows filesystem path to a file:// URI, percent-encoding unsafe characters
-# while preserving the drive-letter colon and path separators.
-function ConvertTo-FileUri([string]$Path) {
-    if (-not $Path) { return $null }
-    $forward = ($Path -replace '\\', '/').TrimEnd('/')
-    $encoded = ConvertTo-EncodedUriPath $forward
-    # ':' is illegal in Windows filenames except after a drive letter, so restoring it
-    # from EscapeDataString's %3A everywhere is safe and keeps "C:" readable in the URI.
-    $encoded = $encoded -replace '%3A', ':'
-    return "file:///$encoded"
 }
 
 # Build a link to a model's page on platform.claude.com from its API id, e.g.
@@ -57,20 +34,6 @@ function ConvertTo-GitHubBranchUrl([string]$RepoDir, [string]$BranchName) {
     if ($httpsUrl -notmatch '^https://github\.com/') { return $null }
     $encodedBranch = ConvertTo-EncodedUriPath $BranchName
     return "$httpsUrl/tree/$encodedBranch"
-}
-
-# Collapse the user's home directory prefix to "~", tolerating either slash style.
-function Format-HomePath([string]$Path) {
-    if (-not $Path) { return $Path }
-    $homePath = $env:USERPROFILE
-    if (-not $homePath) { return $Path }
-    $normPath = $Path.TrimEnd('\', '/') -replace '/', '\'
-    $normHome = $homePath.TrimEnd('\', '/') -replace '/', '\'
-    if ($normPath -ieq $normHome) { return '~' }
-    if ($normPath.StartsWith("$normHome\", [System.StringComparison]::OrdinalIgnoreCase)) {
-        return '~' + $Path.Substring($normHome.Length)
-    }
-    return $Path
 }
 
 # Claude Code pipes a JSON object on stdin; fall back to the real cwd when run by hand.

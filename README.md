@@ -23,6 +23,7 @@ Restart your terminal for the change to take effect.
 cmds\
 ├── _run.ps1          # Single entry point for all commands
 ├── scripts\          # PowerShell implementation for each command
+│   ├── _common.ps1   # Shared formatting helpers (colors, hyperlinks); not a command itself
 │   ├── ls.ps1
 │   └── cdwork.ps1
 ├── .dotfiles\        # User configuration files
@@ -68,7 +69,17 @@ cdwork
 
 Configure the work directory by editing `~\cmds\.dotfiles\.cdwork` — put the full path on a single line. Lines starting with `#` are ignored. The path supports `~` shorthand for your home directory (e.g. `~\Documents\code`); it's resolved to a full absolute path before use, since `cmd.exe`'s `cd /d` doesn't understand `~` itself.
 
+### `cmds`
+
+Lists every available command in a table: its name (Ctrl+click to open that command's script), its description (from the `# DESCRIPTION:` line in its script), and — for a command like `cdwork` that reads a `.dotfiles\.<name>` file — the value it's currently configured to. Any command following that `.dotfiles\.<name>` convention picks up this column automatically, with no changes needed to `cmds.ps1` itself.
+
+```
+cmds
+```
+
 ## Claude Code status line
+
+![Status line example](images/statusline-example.png)
 
 `scripts\claude-statusline.ps1` renders a Claude Code status line showing the session's launch directory, active model, git branch, context window usage, and current date/time. The model and context fields only appear once Claude Code has sent that data (they're absent on the very first render of a session). The folder shown is `workspace.project_dir` (where the session was launched from), not `workspace.current_dir` (the live working directory) — so it stays put even after Claude `cd`s elsewhere internally; the git branch still reflects wherever the session currently is. A `%USERPROFILE%` prefix on the shown folder is collapsed to `~` (e.g. `C:\Users\you\cmds` → `~\cmds`). The folder is also an OSC 8 hyperlink to a `file://` URI, so Ctrl+click (Cmd+click on macOS) opens it in File Explorer on terminals that support clickable links, such as Windows Terminal. The model name links to that model's page on platform.claude.com, and the git branch links to that branch on github.com (only when the repo's `origin` remote is a GitHub URL).
 
