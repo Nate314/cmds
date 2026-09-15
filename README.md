@@ -32,11 +32,13 @@ cmds\
 ├── scripts\          # PowerShell implementation for each command
 │   ├── _common.ps1   # Shared formatting helpers (colors, hyperlinks); not a command itself
 │   ├── ls.ps1
-│   └── cdwork.ps1
+│   ├── cdwork.ps1
+│   └── setup.ps1
 ├── .dotfiles\        # User configuration files
 │   └── .cdwork       # Work directory path for cdwork
 ├── ls.bat
-└── cdwork.bat
+├── cdwork.bat
+└── setup.bat
 ```
 
 Each command is a `.bat` file that delegates to `_run.ps1`, which:
@@ -50,7 +52,7 @@ To add a new command:
 
 ## Note on directory-changing commands in PowerShell
 
-Commands like `cdwork` that change the current directory work in **CMD** but not in PowerShell, because the `.bat` subprocess cannot modify the parent shell's directory. For PowerShell, add a wrapper function to your `$PROFILE`:
+Commands like `cdwork` that change the current directory work in **CMD** but not in PowerShell, because the `.bat` subprocess cannot modify the parent shell's directory. For PowerShell, run `setup` once to add the required wrapper function to your `$PROFILE`:
 
 ```powershell
 function cdwork { Set-Location (& "$HOME\cmds\scripts\cdwork.ps1") }
@@ -75,6 +77,14 @@ cdwork
 ```
 
 Configure the work directory by editing `~\cmds\.dotfiles\.cdwork` — put the full path on a single line. Lines starting with `#` are ignored. The path supports `~` shorthand for your home directory (e.g. `~\Documents\code`); it's resolved to a full absolute path before use, since `cmd.exe`'s `cd /d` doesn't understand `~` itself.
+
+### `setup`
+
+Adds PowerShell wrapper functions for directory-changing commands (currently just `cdwork`) to your `$PROFILE`, creating the profile file if it doesn't exist yet. Safe to run repeatedly; it skips any wrapper already present.
+
+```
+setup
+```
 
 ### `cmds`
 
