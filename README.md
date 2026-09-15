@@ -84,6 +84,13 @@ Lists every available command in a table: its name (Ctrl+click to open that comm
 cmds
 ```
 
+## Claude Code plugins
+
+This repo also publishes a Claude Code plugin marketplace — see
+[`plugins/README.md`](plugins/README.md) for installation and the
+`notifywhen` command family (background condition watcher with a windowed
+chime notification).
+
 ## Claude Code status line
 
 ![Status line example](images/statusline-example.png)
