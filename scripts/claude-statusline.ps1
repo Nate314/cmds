@@ -5,13 +5,37 @@
 
 . (Join-Path $PSScriptRoot '_common.ps1')
 
-# Length of $Text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
-# hyperlink wrappers stripped out (they take zero columns). Used to wrap segments onto
-# additional lines by real width rather than by raw string length.
+# Terminal column width of a single Unicode code point: 2 for characters terminals render
+# double-wide, 1 otherwise. Supplementary-plane emoji (e.g. 📁, 🤖) are surrogate pairs, so
+# .NET string .Length already counts them as 2 UTF-16 units — matching their 2-column width
+# by coincidence. But some double-wide emoji live in the Basic Multilingual Plane as a
+# single UTF-16 unit (e.g. the hourglass ⏳, U+23F3), where .Length undercounts their width
+# by 1. Counting by actual code point, not raw .Length, avoids that undercount.
+function Get-CharWidth([int]$CodePoint) {
+    if (($CodePoint -ge 0x2300 -and $CodePoint -le 0x23FF) -or  # Misc Technical (hourglass, clocks, watch)
+        ($CodePoint -ge 0x2600 -and $CodePoint -le 0x27BF) -or  # Misc Symbols & Dingbats
+        ($CodePoint -ge 0x2B00 -and $CodePoint -le 0x2BFF) -or  # Misc Symbols & Arrows
+        $CodePoint -ge 0x1F000) {                                # Supplementary-plane emoji
+        return 2
+    }
+    return 1
+}
+
+# Width of $Text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
+# hyperlink wrappers stripped out (they take zero columns) and double-wide characters
+# counted as 2. Used to wrap segments onto additional lines by real width rather than by
+# raw string length.
 function Get-VisibleLength([string]$Text) {
     $stripped = $Text -replace "$e\]8;;[^$bel]*$bel", ''
     $stripped = $stripped -replace "$e\[[0-9;]*m", ''
-    return $stripped.Length
+    $width = 0
+    $i = 0
+    while ($i -lt $stripped.Length) {
+        $codePoint = [char]::ConvertToUtf32($stripped, $i)
+        $width += Get-CharWidth $codePoint
+        $i += if ([char]::IsSurrogatePair($stripped, $i)) { 2 } else { 1 }
+    }
+    return $width
 }
 
 # Build a link to a model's page on platform.claude.com from its API id, e.g.
