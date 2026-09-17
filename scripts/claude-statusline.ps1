@@ -60,11 +60,13 @@ function ConvertTo-GitHubBranchUrl([string]$RepoDir, [string]$BranchName) {
     return "$httpsUrl/tree/$encodedBranch"
 }
 
-# Color a rate-limit usage percentage green/yellow/red by how close it is to the limit.
-function Get-UsageColor([double]$Pct) {
-    if ($Pct -ge 80) { return '91' }
-    if ($Pct -ge 50) { return '93' }
-    return '92'
+# A circle glyph filled in proportionally to a 0-100 percentage, from empty to full.
+function Get-CircleIcon([double]$Pct) {
+    if ($Pct -ge 88) { return '●' }
+    if ($Pct -ge 63) { return '◕' }
+    if ($Pct -ge 38) { return '◑' }
+    if ($Pct -ge 13) { return '◔' }
+    return '○'
 }
 
 # Claude Code pipes a JSON object on stdin; fall back to the real cwd when run by hand.
@@ -131,23 +133,20 @@ if ($LASTEXITCODE -eq 0 -and $branch) {
     $segments += (Format-ColorText '92' '🌿') + ' ' + $branchText
 }
 
-# Context usage symbol — only when Claude Code supplied it. Colored by the same
-# green/yellow/red usage thresholds as the rate-limit segments below, for consistency.
+# Context usage — only when Claude Code supplied it (bright yellow). The icon itself
+# fills in from empty to full circle as usage climbs toward 100%.
 if ($null -ne $ctxPct) {
-    $color = Get-UsageColor $ctxPct
-    $segments += (Format-ColorText $color '📊') + ' ' + (Format-ColorText $color "$ctxPct% ctx")
+    $segments += (Format-ColorText '93' (Get-CircleIcon $ctxPct)) + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
 }
 
-# 5-hour session and 7-day weekly rate-limit usage — only present for Pro/Max
-# subscribers, and only after the session's first API response, so either (or both)
-# can be absent.
+# 5-hour session and 7-day weekly rate-limit usage (bright yellow) — only present for
+# Pro/Max subscribers, and only after the session's first API response, so either (or
+# both) can be absent.
 if ($null -ne $fiveHourPct) {
-    $color = Get-UsageColor $fiveHourPct
-    $segments += (Format-ColorText $color '⏳') + ' ' + (Format-ColorText $color "$fiveHourPct% 5h")
+    $segments += (Format-ColorText '93' '⏳') + ' ' + (Format-ColorText '93' "$fiveHourPct% 5h")
 }
 if ($null -ne $sevenDayPct) {
-    $color = Get-UsageColor $sevenDayPct
-    $segments += (Format-ColorText $color '📅') + ' ' + (Format-ColorText $color "$sevenDayPct% 7d")
+    $segments += (Format-ColorText '93' '📅') + ' ' + (Format-ColorText '93' "$sevenDayPct% 7d")
 }
 
 $segments += $time
