@@ -1,17 +1,41 @@
-# DESCRIPTION: Render a Claude Code statusline showing the session's launch directory, git branch, model, context usage, and current date/time with colored symbol icons (reads Claude's JSON from stdin)
+# DESCRIPTION: Render a Claude Code statusline showing the session's launch directory, git branch, model, context usage, 5-hour/7-day rate-limit usage, and current date/time with colored symbol icons (reads Claude's JSON from stdin)
 
 # Emit UTF-8 so the symbol glyphs survive when Claude Code captures stdout.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 . (Join-Path $PSScriptRoot '_common.ps1')
 
-# Length of $Text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
-# hyperlink wrappers stripped out (they take zero columns). Used to wrap segments onto
-# additional lines by real width rather than by raw string length.
+# Terminal column width of a single Unicode code point: 2 for characters terminals render
+# double-wide, 1 otherwise. Supplementary-plane emoji (e.g. 📁, 🤖) are surrogate pairs, so
+# .NET string .Length already counts them as 2 UTF-16 units — matching their 2-column width
+# by coincidence. But some double-wide emoji live in the Basic Multilingual Plane as a
+# single UTF-16 unit (e.g. the hourglass ⏳, U+23F3), where .Length undercounts their width
+# by 1. Counting by actual code point, not raw .Length, avoids that undercount.
+function Get-CharWidth([int]$CodePoint) {
+    if (($CodePoint -ge 0x2300 -and $CodePoint -le 0x23FF) -or  # Misc Technical (hourglass, clocks, watch)
+        ($CodePoint -ge 0x2600 -and $CodePoint -le 0x27BF) -or  # Misc Symbols & Dingbats
+        ($CodePoint -ge 0x2B00 -and $CodePoint -le 0x2BFF) -or  # Misc Symbols & Arrows
+        $CodePoint -ge 0x1F000) {                                # Supplementary-plane emoji
+        return 2
+    }
+    return 1
+}
+
+# Width of $Text as it actually appears on screen, i.e. with ANSI color codes and OSC 8
+# hyperlink wrappers stripped out (they take zero columns) and double-wide characters
+# counted as 2. Used to wrap segments onto additional lines by real width rather than by
+# raw string length.
 function Get-VisibleLength([string]$Text) {
     $stripped = $Text -replace "$e\]8;;[^$bel]*$bel", ''
     $stripped = $stripped -replace "$e\[[0-9;]*m", ''
-    return $stripped.Length
+    $width = 0
+    $i = 0
+    while ($i -lt $stripped.Length) {
+        $codePoint = [char]::ConvertToUtf32($stripped, $i)
+        $width += Get-CharWidth $codePoint
+        $i += if ([char]::IsSurrogatePair($stripped, $i)) { 2 } else { 1 }
+    }
+    return $width
 }
 
 # Build a link to a model's page on platform.claude.com from its API id, e.g.
@@ -36,6 +60,15 @@ function ConvertTo-GitHubBranchUrl([string]$RepoDir, [string]$BranchName) {
     return "$httpsUrl/tree/$encodedBranch"
 }
 
+# A circle glyph filled in proportionally to a 0-100 percentage, from empty to full.
+function Get-CircleIcon([double]$Pct) {
+    if ($Pct -ge 88) { return '●' }
+    if ($Pct -ge 63) { return '◕' }
+    if ($Pct -ge 38) { return '◑' }
+    if ($Pct -ge 13) { return '◔' }
+    return '○'
+}
+
 # Claude Code pipes a JSON object on stdin; fall back to the real cwd when run by hand.
 # Read via the $input pipeline variable, not [Console]::In — when this script runs under
 # `pwsh -File` invoked from Git Bash (as Claude Code does on Windows), Console.In does not
@@ -46,6 +79,8 @@ $projectDir = $null
 $model = $null
 $modelId = $null
 $ctxPct = $null
+$fiveHourPct = $null
+$sevenDayPct = $null
 $raw = $input | Out-String
 if ($raw.Trim()) {
     try {
@@ -56,6 +91,8 @@ if ($raw.Trim()) {
         $model = $json.model.display_name
         $modelId = $json.model.id
         $ctxPct = $json.context_window.used_percentage
+        $fiveHourPct = $json.rate_limits.five_hour.used_percentage
+        $sevenDayPct = $json.rate_limits.seven_day.used_percentage
     } catch { }
 }
 if (-not $cwd) { $cwd = (Get-Location).Path }
@@ -96,9 +133,20 @@ if ($LASTEXITCODE -eq 0 -and $branch) {
     $segments += (Format-ColorText '92' '🌿') + ' ' + $branchText
 }
 
-# Context usage symbol (bright yellow) — only when Claude Code supplied it
+# Context usage — only when Claude Code supplied it (bright yellow). The icon itself
+# fills in from empty to full circle as usage climbs toward 100%.
 if ($null -ne $ctxPct) {
-    $segments += (Format-ColorText '93' '📊') + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
+    $segments += (Format-ColorText '93' (Get-CircleIcon $ctxPct)) + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
+}
+
+# 5-hour session and 7-day weekly rate-limit usage (bright yellow) — only present for
+# Pro/Max subscribers, and only after the session's first API response, so either (or
+# both) can be absent.
+if ($null -ne $fiveHourPct) {
+    $segments += (Format-ColorText '93' '⏳') + ' ' + (Format-ColorText '93' "$fiveHourPct% 5h")
+}
+if ($null -ne $sevenDayPct) {
+    $segments += (Format-ColorText '93' '📅') + ' ' + (Format-ColorText '93' "$sevenDayPct% 7d")
 }
 
 $segments += $time
