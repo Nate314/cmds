@@ -121,7 +121,7 @@ if ($null -ne $fiveHourPct) {
 }
 if ($null -ne $sevenDayPct) {
     $color = Get-UsageColor $sevenDayPct
-    $segments += (Format-ColorText $color '🗓') + ' ' + (Format-ColorText $color "$sevenDayPct% 7d")
+    $segments += (Format-ColorText $color '📅') + ' ' + (Format-ColorText $color "$sevenDayPct% 7d")
 }
 
 $segments += $time
