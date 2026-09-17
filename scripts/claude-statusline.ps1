@@ -1,4 +1,4 @@
-# DESCRIPTION: Render a Claude Code statusline showing the session's launch directory, git branch, model, context usage, and current date/time with colored symbol icons (reads Claude's JSON from stdin)
+# DESCRIPTION: Render a Claude Code statusline showing the session's launch directory, git branch, model, context usage, 5-hour/7-day rate-limit usage, and current date/time with colored symbol icons (reads Claude's JSON from stdin)
 
 # Emit UTF-8 so the symbol glyphs survive when Claude Code captures stdout.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -36,6 +36,13 @@ function ConvertTo-GitHubBranchUrl([string]$RepoDir, [string]$BranchName) {
     return "$httpsUrl/tree/$encodedBranch"
 }
 
+# Color a rate-limit usage percentage green/yellow/red by how close it is to the limit.
+function Get-UsageColor([double]$Pct) {
+    if ($Pct -ge 80) { return '91' }
+    if ($Pct -ge 50) { return '93' }
+    return '92'
+}
+
 # Claude Code pipes a JSON object on stdin; fall back to the real cwd when run by hand.
 # Read via the $input pipeline variable, not [Console]::In — when this script runs under
 # `pwsh -File` invoked from Git Bash (as Claude Code does on Windows), Console.In does not
@@ -46,6 +53,8 @@ $projectDir = $null
 $model = $null
 $modelId = $null
 $ctxPct = $null
+$fiveHourPct = $null
+$sevenDayPct = $null
 $raw = $input | Out-String
 if ($raw.Trim()) {
     try {
@@ -56,6 +65,8 @@ if ($raw.Trim()) {
         $model = $json.model.display_name
         $modelId = $json.model.id
         $ctxPct = $json.context_window.used_percentage
+        $fiveHourPct = $json.rate_limits.five_hour.used_percentage
+        $sevenDayPct = $json.rate_limits.seven_day.used_percentage
     } catch { }
 }
 if (-not $cwd) { $cwd = (Get-Location).Path }
@@ -99,6 +110,18 @@ if ($LASTEXITCODE -eq 0 -and $branch) {
 # Context usage symbol (bright yellow) — only when Claude Code supplied it
 if ($null -ne $ctxPct) {
     $segments += (Format-ColorText '93' '📊') + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
+}
+
+# 5-hour session and 7-day weekly rate-limit usage — only present for Pro/Max
+# subscribers, and only after the session's first API response, so either (or both)
+# can be absent.
+if ($null -ne $fiveHourPct) {
+    $color = Get-UsageColor $fiveHourPct
+    $segments += (Format-ColorText $color '⏳') + ' ' + (Format-ColorText $color "$fiveHourPct% 5h")
+}
+if ($null -ne $sevenDayPct) {
+    $color = Get-UsageColor $sevenDayPct
+    $segments += (Format-ColorText $color '🗓') + ' ' + (Format-ColorText $color "$sevenDayPct% 7d")
 }
 
 $segments += $time
