@@ -131,9 +131,11 @@ if ($LASTEXITCODE -eq 0 -and $branch) {
     $segments += (Format-ColorText '92' '🌿') + ' ' + $branchText
 }
 
-# Context usage symbol (bright yellow) — only when Claude Code supplied it
+# Context usage symbol — only when Claude Code supplied it. Colored by the same
+# green/yellow/red usage thresholds as the rate-limit segments below, for consistency.
 if ($null -ne $ctxPct) {
-    $segments += (Format-ColorText '93' '📊') + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
+    $color = Get-UsageColor $ctxPct
+    $segments += (Format-ColorText $color '📊') + ' ' + (Format-ColorText $color "$ctxPct% ctx")
 }
 
 # 5-hour session and 7-day weekly rate-limit usage — only present for Pro/Max
