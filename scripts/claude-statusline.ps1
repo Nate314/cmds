@@ -14,6 +14,7 @@
 # single UTF-16 unit (e.g. the hourglass ⏳, U+23F3), where .Length undercounts their width
 # by 1. Counting by actual code point, not raw .Length, avoids that undercount.
 function Get-CharWidth([int]$CodePoint) {
+    if ($CodePoint -eq 0xFE0F) { return 0 }  # Variation selector (e.g. the emoji form of ✏️): invisible, takes no column
     if (($CodePoint -ge 0x2300 -and $CodePoint -le 0x23FF) -or  # Misc Technical (hourglass, clocks, watch)
         ($CodePoint -ge 0x2600 -and $CodePoint -le 0x27BF) -or  # Misc Symbols & Dingbats
         ($CodePoint -ge 0x2B00 -and $CodePoint -le 0x2BFF) -or  # Misc Symbols & Arrows
@@ -178,7 +179,7 @@ if ($show['crypto'] -or $show['metals']) {
 
 if ($show['clock']) { $segments += $time }
 
-# Wrap segments onto additional lines when they don't fit in the terminal width. Claude
+# Wrap segments into an aligned grid of rows when they don't fit in the terminal width. Claude
 # Code sets COLUMNS/LINES on the environment before running this script specifically so
 # scripts can adapt (stdout is captured, not connected to the terminal, so tput/console
 # width detection doesn't work here). Each line this script writes renders as its own row.
@@ -194,21 +195,40 @@ if ([int]::TryParse($env:COLUMNS, [ref]$parsedColumns) -and $parsedColumns -gt 0
 $columns = [Math]::Max(1, $columns - 4)
 $sepWidth = Get-VisibleLength $sep
 
-$lines = @()
-$currentSegments = @()
-$currentWidth = 0
-foreach ($seg in $segments) {
-    $segWidth = Get-VisibleLength $seg
-    $addedWidth = if ($currentSegments.Count -eq 0) { $segWidth } else { $segWidth + $sepWidth }
-    if ($currentSegments.Count -gt 0 -and ($currentWidth + $addedWidth) -gt $columns) {
-        $lines += ($currentSegments -join $sep)
-        $currentSegments = @($seg)
-        $currentWidth = $segWidth
-    } else {
-        $currentSegments += $seg
-        $currentWidth += $addedWidth
-    }
-}
-if ($currentSegments.Count -gt 0) { $lines += ($currentSegments -join $sep) }
+# Lay segments out row by row in an aligned grid: use the fewest rows whose widest cells
+# (per column) fit within $MaxWidth, then pad each column to its widest cell so the
+# separators line up across rows. Falls back to one segment per row when nothing narrower
+# fits. Returns one string per row.
+function Format-SegmentGrid([string[]]$Segments, [string]$Sep, [int]$MaxWidth) {
+    $count = $Segments.Count
+    if ($count -eq 0) { return @() }
+    $sepWidth = Get-VisibleLength $Sep
+    $widths = @($Segments | ForEach-Object { Get-VisibleLength $_ })
 
-$lines | ForEach-Object { Write-Output $_ }
+    for ($rows = 1; $rows -le $count; $rows++) {
+        $cols = [int][Math]::Ceiling($count / $rows)
+        $colWidths = @(0) * $cols
+        for ($i = 0; $i -lt $count; $i++) {
+            $c = $i % $cols
+            if ($widths[$i] -gt $colWidths[$c]) { $colWidths[$c] = $widths[$i] }
+        }
+        $total = ($colWidths | Measure-Object -Sum).Sum + ($cols - 1) * $sepWidth
+        if ($total -le $MaxWidth) { break }
+    }
+
+    $lines = @()
+    for ($r = 0; $r -lt $rows; $r++) {
+        $cells = @()
+        for ($c = 0; $c -lt $cols; $c++) {
+            $i = $r * $cols + $c
+            if ($i -ge $count) { break }
+            $isLastInRow = ($c -eq $cols - 1) -or ($i + 1 -ge $count)
+            $pad = if ($isLastInRow) { 0 } else { $colWidths[$c] - $widths[$i] }
+            $cells += $Segments[$i] + (' ' * $pad)
+        }
+        if ($cells.Count -gt 0) { $lines += ($cells -join $Sep) }
+    }
+    return $lines
+}
+
+Format-SegmentGrid $segments $sep $columns | ForEach-Object { Write-Output $_ }

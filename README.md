@@ -114,7 +114,7 @@ Run `claude-statusline-config` to see every status line item with its current st
 
 The price items (BTC/ETH and gold/silver) are OFF by default. When enabled, prices come from Yahoo Finance's keyless chart endpoint (gold and silver are front-month futures, not spot). The status line never waits on the network: it reads a cache at `%TEMP%\_statusline_prices.json` and, when that is more than 60 seconds old, starts a hidden background refresh. A segment appears once its prices have been fetched at least once, and a failed fetch keeps the last known values.
 
-The status line wraps onto additional lines when the segments don't fit in the terminal width, using the `COLUMNS` environment variable Claude Code sets before running the script (each line the script writes renders as its own status-line row).
+When the segments don't fit in the terminal width, the status line wraps into an aligned grid: it uses the fewest rows that fit, fills them row by row, and pads each column to its widest cell so the `|` separators line up across rows. The width comes from the `COLUMNS` environment variable Claude Code sets before running the script, minus a 4-column margin because the status line area is slightly narrower than `COLUMNS` reports (each line the script writes renders as its own status-line row).
 
 To enable it, add this to `~\.claude\settings.json`:
 
