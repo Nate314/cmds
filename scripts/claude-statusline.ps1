@@ -187,6 +187,11 @@ $parsedColumns = 0
 if ([int]::TryParse($env:COLUMNS, [ref]$parsedColumns) -and $parsedColumns -gt 0) {
     $columns = $parsedColumns
 }
+# The status line area is a few columns narrower than the COLUMNS Claude Code reports (it
+# reserves its own padding): with COLUMNS=129, a line computed as exactly 129 wide rendered
+# truncated with an ellipsis around column 125. Wrap against a slightly smaller width so
+# lines never reach the truncation point.
+$columns = [Math]::Max(1, $columns - 4)
 $sepWidth = Get-VisibleLength $sep
 
 $lines = @()
