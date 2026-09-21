@@ -196,6 +196,9 @@ if ([int]::TryParse($env:COLUMNS, [ref]$parsedColumns) -and $parsedColumns -gt 0
 # lines never reach the truncation point.
 $columns = [Math]::Max(1, $columns - 4)
 $sepWidth = Get-VisibleLength $sep
+# The border adds "| " and " |" (4 columns) around the grid, so the grid gets that much less.
+$borderWidth = 4
+if ($show['border']) { $columns = [Math]::Max(1, $columns - $borderWidth) }
 
 # A grid is an array of columns; each column is an array of cell strings, top to bottom.
 
@@ -270,6 +273,19 @@ function Select-StatusLineGrid($Segments, [string]$Sep, [int]$MaxWidth) {
     return , (Get-RowMajorGrid $values $values.Count)
 }
 
+# Draw a rounded box around $Lines, padding each to the widest so the right edge lines up.
+function Format-RoundedBorder([string[]]$Lines) {
+    $inner = ($Lines | ForEach-Object { Get-VisibleLength $_ } | Measure-Object -Maximum).Maximum
+    $horizontal = [string][char]0x2500 * ($inner + 2)
+    $vertical = Format-ColorText '90' ([string][char]0x2502)
+    $top = Format-ColorText '90' "$([char]0x256D)$horizontal$([char]0x256E)"
+    $bottom = Format-ColorText '90' "$([char]0x2570)$horizontal$([char]0x256F)"
+    $body = $Lines | ForEach-Object { "$vertical $_$(' ' * ($inner - (Get-VisibleLength $_))) $vertical" }
+    return @($top) + @($body) + @($bottom)
+}
+
 if ($segments.Count -gt 0) {
-    Format-Grid (Select-StatusLineGrid $segments $sep $columns) $sep | ForEach-Object { Write-Output $_ }
+    $lines = Format-Grid (Select-StatusLineGrid $segments $sep $columns) $sep
+    if ($show['border']) { $lines = Format-RoundedBorder $lines }
+    $lines | ForEach-Object { Write-Output $_ }
 }

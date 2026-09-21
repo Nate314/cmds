@@ -4,7 +4,7 @@ $script:StatusLineDotfile = Join-Path $PSScriptRoot '..\.dotfiles\.statusline'
 
 # Every item the status line can render, in display order. Default is the state used when
 # the dotfile has no entry for the item; price items default OFF so nothing touches the
-# network until the user opts in.
+# network until the user opts in. The border is a layout option rather than a segment.
 $script:StatusLineItems = @(
     @{ Key = 'dir';    Label = 'Directory';     Default = $true }
     @{ Key = 'model';  Label = 'Model';         Default = $true }
@@ -16,6 +16,7 @@ $script:StatusLineItems = @(
     @{ Key = 'crypto'; Label = 'BTC/ETH prices';      Default = $false }
     @{ Key = 'metals'; Label = 'Gold/silver prices';  Default = $false }
     @{ Key = 'clock';  Label = 'Date/time';     Default = $true }
+    @{ Key = 'border'; Label = 'Rounded border';      Default = $false }
 )
 
 # When the status line has to wrap and the plain layout doesn't fit, related items are
