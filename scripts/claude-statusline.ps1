@@ -122,14 +122,16 @@ $dir = (Format-ColorText '33' '📁') + ' ' + $dirText
 $time = (Format-ColorText '32' '🕒') + ' ' + (Format-ColorText '95' $now.ToString('yyyy-MM-dd HH:mm:ss'))
 
 $sep = Format-ColorText '90' ' | '
-$segments = @()
-if ($show['dir']) { $segments += $dir }
+# Keyed by item so the layout can group related segments; insertion order is the
+# single-line display order.
+$segments = [ordered]@{}
+if ($show['dir']) { $segments['dir'] = $dir }
 
 # Model symbol (bright blue) — only when Claude Code supplied it. Links to the model's
 # page on platform.claude.com.
 if ($show['model'] -and $model) {
     $modelText = Format-Hyperlink (ConvertTo-ModelUrl $modelId) (Format-ColorText '94' $model)
-    $segments += (Format-ColorText '94' '🤖') + ' ' + $modelText
+    $segments['model'] = (Format-ColorText '94' '🤖') + ' ' + $modelText
 }
 
 # Git branch symbol (bright green) — only when cwd is a repo. Links to the branch on
@@ -139,28 +141,28 @@ if ($show['branch'] -and $LASTEXITCODE -eq 0 -and $branch) {
     $branchText = Format-ColorText '92' $branch
     $branchUrl = ConvertTo-GitHubBranchUrl $cwd $branch
     if ($branchUrl) { $branchText = Format-Hyperlink $branchUrl $branchText }
-    $segments += (Format-ColorText '92' '🌿') + ' ' + $branchText
+    $segments['branch'] = (Format-ColorText '92' '🌿') + ' ' + $branchText
 }
 
 # Context usage — only when Claude Code supplied it (bright yellow). The icon itself
 # fills in from empty to full circle as usage climbs toward 100%.
 if ($show['ctx'] -and $null -ne $ctxPct) {
-    $segments += (Format-ColorText '93' (Get-CircleIcon $ctxPct)) + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
+    $segments['ctx'] = (Format-ColorText '93' (Get-CircleIcon $ctxPct)) + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
 }
 
 # 5-hour session and 7-day weekly rate-limit usage (bright yellow) — only present for
 # Pro/Max subscribers, and only after the session's first API response, so either (or
 # both) can be absent.
 if ($show['5h'] -and $null -ne $fiveHourPct) {
-    $segments += (Format-ColorText '93' '⏳') + ' ' + (Format-ColorText '93' "$fiveHourPct% 5h")
+    $segments['5h'] = (Format-ColorText '93' '⏳') + ' ' + (Format-ColorText '93' "$fiveHourPct% 5h")
 }
 if ($show['7d'] -and $null -ne $sevenDayPct) {
-    $segments += (Format-ColorText '93' '📅') + ' ' + (Format-ColorText '93' "$sevenDayPct% 7d")
+    $segments['7d'] = (Format-ColorText '93' '📅') + ' ' + (Format-ColorText '93' "$sevenDayPct% 7d")
 }
 
 # Lines added (green) / removed (red) this session — only when Claude Code supplied them.
 if ($show['lines'] -and ($null -ne $linesAdded -or $null -ne $linesRemoved)) {
-    $segments += (Format-ColorText '97' '✏️') + ' ' + (Format-ColorText '92' "+$([int]$linesAdded)") + ' ' + (Format-ColorText '91' "-$([int]$linesRemoved)")
+    $segments['lines'] = (Format-ColorText '97' '✏️') + ' ' + (Format-ColorText '92' "+$([int]$linesAdded)") + ' ' + (Format-ColorText '91' "-$([int]$linesRemoved)")
 }
 
 # Live prices come from a cache refreshed in the background, so a segment appears only
@@ -168,16 +170,16 @@ if ($show['lines'] -and ($null -ne $linesAdded -or $null -ne $linesRemoved)) {
 if ($show['crypto'] -or $show['metals']) {
     $prices = Get-CachedPrices
     if ($show['crypto'] -and $null -ne $prices.btc -and $null -ne $prices.eth) {
-        $segments += (Format-ColorText '93' '₿') + ' ' + (Format-ColorText '93' ('{0:N0}' -f $prices.btc)) + '  ' +
+        $segments['crypto'] = (Format-ColorText '93' '₿') + ' ' + (Format-ColorText '93' ('{0:N0}' -f $prices.btc)) + '  ' +
             (Format-ColorText '94' 'Ξ') + ' ' + (Format-ColorText '94' ('{0:N0}' -f $prices.eth))
     }
     if ($show['metals'] -and $null -ne $prices.gold -and $null -ne $prices.silver) {
-        $segments += (Format-ColorText '33' '🥇') + ' ' + (Format-ColorText '33' ('{0:N0}' -f $prices.gold)) + '  ' +
+        $segments['metals'] = (Format-ColorText '33' '🥇') + ' ' + (Format-ColorText '33' ('{0:N0}' -f $prices.gold)) + '  ' +
             (Format-ColorText '37' '🥈') + ' ' + (Format-ColorText '37' ('{0:N2}' -f $prices.silver))
     }
 }
 
-if ($show['clock']) { $segments += $time }
+if ($show['clock']) { $segments['clock'] = $time }
 
 # Wrap segments into an aligned grid of rows when they don't fit in the terminal width. Claude
 # Code sets COLUMNS/LINES on the environment before running this script specifically so
@@ -195,40 +197,79 @@ if ([int]::TryParse($env:COLUMNS, [ref]$parsedColumns) -and $parsedColumns -gt 0
 $columns = [Math]::Max(1, $columns - 4)
 $sepWidth = Get-VisibleLength $sep
 
-# Lay segments out row by row in an aligned grid: use the fewest rows whose widest cells
-# (per column) fit within $MaxWidth, then pad each column to its widest cell so the
-# separators line up across rows. Falls back to one segment per row when nothing narrower
-# fits. Returns one string per row.
-function Format-SegmentGrid([string[]]$Segments, [string]$Sep, [int]$MaxWidth) {
-    $count = $Segments.Count
-    if ($count -eq 0) { return @() }
-    $sepWidth = Get-VisibleLength $Sep
-    $widths = @($Segments | ForEach-Object { Get-VisibleLength $_ })
+# A grid is an array of columns; each column is an array of cell strings, top to bottom.
 
-    for ($rows = 1; $rows -le $count; $rows++) {
-        $cols = [int][Math]::Ceiling($count / $rows)
-        $colWidths = @(0) * $cols
-        for ($i = 0; $i -lt $count; $i++) {
-            $c = $i % $cols
-            if ($widths[$i] -gt $colWidths[$c]) { $colWidths[$c] = $widths[$i] }
-        }
-        $total = ($colWidths | Measure-Object -Sum).Sum + ($cols - 1) * $sepWidth
-        if ($total -le $MaxWidth) { break }
+# Row-major grid of $Segments over $Rows rows: cells fill row by row, so column c holds
+# cells c, c+cols, c+2*cols, ...
+function Get-RowMajorGrid([string[]]$Segments, [int]$Rows) {
+    $cols = [int][Math]::Ceiling($Segments.Count / $Rows)
+    $grid = @()
+    for ($c = 0; $c -lt $cols; $c++) {
+        $column = @()
+        for ($i = $c; $i -lt $Segments.Count; $i += $cols) { $column += $Segments[$i] }
+        $grid += , $column
     }
+    return , $grid
+}
 
+# Stacked grid: each column of $Stacks (keys of related items) becomes a column holding
+# whichever of those segments are present; columns with none present are dropped.
+function Get-StackedGrid($Segments, $Stacks) {
+    $grid = @()
+    foreach ($stack in $Stacks) {
+        $column = @($stack | Where-Object { $Segments.Contains($_) } | ForEach-Object { $Segments[$_] })
+        if ($column.Count -gt 0) { $grid += , $column }
+    }
+    return , $grid
+}
+
+# Width of each grid column: its widest cell.
+function Get-GridColumnWidths($Grid) {
+    return @($Grid | ForEach-Object { ($_ | ForEach-Object { Get-VisibleLength $_ } | Measure-Object -Maximum).Maximum })
+}
+
+function Get-GridWidth($Grid, [int]$SepWidth) {
+    $widths = Get-GridColumnWidths $Grid
+    return ($widths | Measure-Object -Sum).Sum + ($widths.Count - 1) * $SepWidth
+}
+
+# Render a grid to one string per row, padding each cell to its column's width so the
+# separators line up across rows. The last cell in a row is left unpadded.
+function Format-Grid($Grid, [string]$Sep) {
+    $widths = Get-GridColumnWidths $Grid
+    $rowCount = ($Grid | ForEach-Object { $_.Count } | Measure-Object -Maximum).Maximum
     $lines = @()
-    for ($r = 0; $r -lt $rows; $r++) {
+    for ($r = 0; $r -lt $rowCount; $r++) {
         $cells = @()
-        for ($c = 0; $c -lt $cols; $c++) {
-            $i = $r * $cols + $c
-            if ($i -ge $count) { break }
-            $isLastInRow = ($c -eq $cols - 1) -or ($i + 1 -ge $count)
-            $pad = if ($isLastInRow) { 0 } else { $colWidths[$c] - $widths[$i] }
-            $cells += $Segments[$i] + (' ' * $pad)
+        $lastCol = -1
+        for ($c = 0; $c -lt $Grid.Count; $c++) { if ($r -lt $Grid[$c].Count) { $lastCol = $c } }
+        for ($c = 0; $c -le $lastCol; $c++) {
+            if ($r -ge $Grid[$c].Count) { $cells += ' ' * $widths[$c]; continue }
+            $pad = if ($c -eq $lastCol) { 0 } else { $widths[$c] - (Get-VisibleLength $Grid[$c][$r]) }
+            $cells += $Grid[$c][$r] + (' ' * $pad)
         }
-        if ($cells.Count -gt 0) { $lines += ($cells -join $Sep) }
+        $lines += ($cells -join $Sep)
     }
     return $lines
 }
 
-Format-SegmentGrid $segments $sep $columns | ForEach-Object { Write-Output $_ }
+# Pick the first layout that fits $MaxWidth: everything on one line; else related items
+# stacked into columns; else a plain row-major grid with as few rows as possible (one
+# segment per row when nothing narrower fits).
+function Select-StatusLineGrid($Segments, [string]$Sep, [int]$MaxWidth) {
+    $sepWidth = Get-VisibleLength $Sep
+    $values = @($Segments.Values)
+    $candidates = @((Get-RowMajorGrid $values 1), (Get-StackedGrid $Segments $script:StatusLineStacks))
+    foreach ($grid in $candidates) {
+        if ($grid.Count -gt 0 -and (Get-GridWidth $grid $sepWidth) -le $MaxWidth) { return , $grid }
+    }
+    for ($rows = 2; $rows -lt $values.Count; $rows++) {
+        $grid = Get-RowMajorGrid $values $rows
+        if ((Get-GridWidth $grid $sepWidth) -le $MaxWidth) { return , $grid }
+    }
+    return , (Get-RowMajorGrid $values $values.Count)
+}
+
+if ($segments.Count -gt 0) {
+    Format-Grid (Select-StatusLineGrid $segments $sep $columns) $sep | ForEach-Object { Write-Output $_ }
+}

@@ -18,6 +18,17 @@ $script:StatusLineItems = @(
     @{ Key = 'clock';  Label = 'Date/time';     Default = $true }
 )
 
+# When the status line has to wrap and the plain layout doesn't fit, related items are
+# stacked into columns (top to bottom, in this order) instead of flowing row by row. Items
+# that are toggled off or have no data are skipped, and a column with nothing left is dropped.
+$script:StatusLineStacks = @(
+    ,@('dir', 'clock')
+    ,@('model', 'ctx')
+    ,@('branch', 'lines')
+    ,@('5h', '7d')
+    ,@('crypto', 'metals')
+)
+
 # Read the dotfile's `key=on|off` lines into a hashtable of key -> bool. Missing file or
 # unknown/malformed lines are ignored, so defaults apply.
 function Read-StatusLineSettings {
