@@ -31,11 +31,14 @@ cmds\
 ├── _run.ps1          # Single entry point for all commands
 ├── scripts\          # PowerShell implementation for each command
 │   ├── _common.ps1   # Shared formatting helpers (colors, hyperlinks); not a command itself
+│   ├── _statusline-settings.ps1  # Status line item list and ON/OFF state; not a command itself
+│   ├── _prices.ps1   # Cached BTC/ETH/gold/silver prices; not a command itself
 │   ├── ls.ps1
 │   ├── cdwork.ps1
 │   └── setup.ps1
 ├── .dotfiles\        # User configuration files
-│   └── .cdwork       # Work directory path for cdwork
+│   ├── .cdwork       # Work directory path for cdwork
+│   └── .statusline   # Status line item ON/OFF state (created by claude-statusline-config)
 ├── ls.bat
 ├── cdwork.bat
 └── setup.bat
@@ -105,7 +108,11 @@ chime notification).
 
 ![Status line example](images/statusline-example.png)
 
-`scripts\claude-statusline.ps1` renders a Claude Code status line showing the session's launch directory, active model, git branch, context window usage, 5-hour/7-day rate-limit usage, and current date/time. The model, context, and rate-limit fields only appear once Claude Code has sent that data (they're absent on the very first render of a session), and the rate-limit fields only appear at all for Pro/Max subscribers. The folder shown is `workspace.project_dir` (where the session was launched from), not `workspace.current_dir` (the live working directory) — so it stays put even after Claude `cd`s elsewhere internally; the git branch still reflects wherever the session currently is. A `%USERPROFILE%` prefix on the shown folder is collapsed to `~` (e.g. `C:\Users\you\cmds` → `~\cmds`). The folder is also an OSC 8 hyperlink to a `file://` URI, so Ctrl+click (Cmd+click on macOS) opens it in File Explorer on terminals that support clickable links, such as Windows Terminal. The model name links to that model's page on platform.claude.com, and the git branch links to that branch on github.com (only when the repo's `origin` remote is a GitHub URL). The context, 5-hour (session), and 7-day (weekly) usage percentages are all bright yellow. The context segment's icon fills in from an empty circle (○) to a full one (●) as usage climbs toward 100%.
+`scripts\claude-statusline.ps1` renders a Claude Code status line showing the session's launch directory, active model, git branch, context window usage, 5-hour/7-day rate-limit usage, lines added/removed this session (`✏️ +120 -34`, green/red), and current date/time, plus optional live BTC/ETH and gold/silver prices. The model, context, lines, and rate-limit fields only appear once Claude Code has sent that data (they're absent on the very first render of a session), and the rate-limit fields only appear at all for Pro/Max subscribers. The folder shown is `workspace.project_dir` (where the session was launched from), not `workspace.current_dir` (the live working directory) — so it stays put even after Claude `cd`s elsewhere internally; the git branch still reflects wherever the session currently is. A `%USERPROFILE%` prefix on the shown folder is collapsed to `~` (e.g. `C:\Users\you\cmds` → `~\cmds`). The folder is also an OSC 8 hyperlink to a `file://` URI, so Ctrl+click (Cmd+click on macOS) opens it in File Explorer on terminals that support clickable links, such as Windows Terminal. The model name links to that model's page on platform.claude.com, and the git branch links to that branch on github.com (only when the repo's `origin` remote is a GitHub URL). The context, 5-hour (session), and 7-day (weekly) usage percentages are all bright yellow. The context segment's icon fills in from an empty circle (○) to a full one (●) as usage climbs toward 100%.
+
+Run `claude-statusline-config` to see every status line item with its current state (ON/OFF) and toggle any of them by number. The choices are saved to `.dotfiles\.statusline` (`key=on|off` lines) and take effect on the next status line refresh. Items without a saved entry default to ON, except the price items.
+
+The price items (BTC/ETH and gold/silver) are OFF by default. When enabled, prices come from Yahoo Finance's keyless chart endpoint (gold and silver are front-month futures, not spot). The status line never waits on the network: it reads a cache at `%TEMP%\_statusline_prices.json` and, when that is more than 60 seconds old, starts a hidden background refresh. A segment appears once its prices have been fetched at least once, and a failed fetch keeps the last known values.
 
 The status line wraps onto additional lines when the segments don't fit in the terminal width, using the `COLUMNS` environment variable Claude Code sets before running the script (each line the script writes renders as its own status-line row).
 

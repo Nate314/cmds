@@ -4,6 +4,8 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 . (Join-Path $PSScriptRoot '_common.ps1')
+. (Join-Path $PSScriptRoot '_statusline-settings.ps1')
+. (Join-Path $PSScriptRoot '_prices.ps1')
 
 # Terminal column width of a single Unicode code point: 2 for characters terminals render
 # double-wide, 1 otherwise. Supplementary-plane emoji (e.g. 📁, 🤖) are surrogate pairs, so
@@ -81,6 +83,8 @@ $modelId = $null
 $ctxPct = $null
 $fiveHourPct = $null
 $sevenDayPct = $null
+$linesAdded = $null
+$linesRemoved = $null
 $raw = $input | Out-String
 if ($raw.Trim()) {
     try {
@@ -93,6 +97,8 @@ if ($raw.Trim()) {
         $ctxPct = $json.context_window.used_percentage
         $fiveHourPct = $json.rate_limits.five_hour.used_percentage
         $sevenDayPct = $json.rate_limits.seven_day.used_percentage
+        $linesAdded = $json.cost.total_lines_added
+        $linesRemoved = $json.cost.total_lines_removed
     } catch { }
 }
 if (-not $cwd) { $cwd = (Get-Location).Path }
@@ -101,6 +107,7 @@ if (-not $cwd) { $cwd = (Get-Location).Path }
 if (-not $projectDir) { $projectDir = $cwd }
 
 $now = Get-Date
+$show = Get-StatusLineState
 
 # Folder symbol (yellow) + path (bright cyan), with the home directory collapsed to ~.
 # The path is an OSC 8 hyperlink to a file:// URI, so Ctrl+click opens it in File Explorer
@@ -114,19 +121,20 @@ $dir = (Format-ColorText '33' '📁') + ' ' + $dirText
 $time = (Format-ColorText '32' '🕒') + ' ' + (Format-ColorText '95' $now.ToString('yyyy-MM-dd HH:mm:ss'))
 
 $sep = Format-ColorText '90' ' | '
-$segments = @($dir)
+$segments = @()
+if ($show['dir']) { $segments += $dir }
 
 # Model symbol (bright blue) — only when Claude Code supplied it. Links to the model's
 # page on platform.claude.com.
-if ($model) {
+if ($show['model'] -and $model) {
     $modelText = Format-Hyperlink (ConvertTo-ModelUrl $modelId) (Format-ColorText '94' $model)
     $segments += (Format-ColorText '94' '🤖') + ' ' + $modelText
 }
 
 # Git branch symbol (bright green) — only when cwd is a repo. Links to the branch on
 # github.com when the repo's origin remote is a GitHub URL.
-$branch = git -C $cwd rev-parse --abbrev-ref HEAD 2>$null
-if ($LASTEXITCODE -eq 0 -and $branch) {
+$branch = if ($show['branch']) { git -C $cwd rev-parse --abbrev-ref HEAD 2>$null }
+if ($show['branch'] -and $LASTEXITCODE -eq 0 -and $branch) {
     $branchText = Format-ColorText '92' $branch
     $branchUrl = ConvertTo-GitHubBranchUrl $cwd $branch
     if ($branchUrl) { $branchText = Format-Hyperlink $branchUrl $branchText }
@@ -135,21 +143,40 @@ if ($LASTEXITCODE -eq 0 -and $branch) {
 
 # Context usage — only when Claude Code supplied it (bright yellow). The icon itself
 # fills in from empty to full circle as usage climbs toward 100%.
-if ($null -ne $ctxPct) {
+if ($show['ctx'] -and $null -ne $ctxPct) {
     $segments += (Format-ColorText '93' (Get-CircleIcon $ctxPct)) + ' ' + (Format-ColorText '93' "$ctxPct% ctx")
 }
 
 # 5-hour session and 7-day weekly rate-limit usage (bright yellow) — only present for
 # Pro/Max subscribers, and only after the session's first API response, so either (or
 # both) can be absent.
-if ($null -ne $fiveHourPct) {
+if ($show['5h'] -and $null -ne $fiveHourPct) {
     $segments += (Format-ColorText '93' '⏳') + ' ' + (Format-ColorText '93' "$fiveHourPct% 5h")
 }
-if ($null -ne $sevenDayPct) {
+if ($show['7d'] -and $null -ne $sevenDayPct) {
     $segments += (Format-ColorText '93' '📅') + ' ' + (Format-ColorText '93' "$sevenDayPct% 7d")
 }
 
-$segments += $time
+# Lines added (green) / removed (red) this session — only when Claude Code supplied them.
+if ($show['lines'] -and ($null -ne $linesAdded -or $null -ne $linesRemoved)) {
+    $segments += (Format-ColorText '97' '✏️') + ' ' + (Format-ColorText '92' "+$([int]$linesAdded)") + ' ' + (Format-ColorText '91' "-$([int]$linesRemoved)")
+}
+
+# Live prices come from a cache refreshed in the background, so a segment appears only
+# once its prices have been fetched at least once.
+if ($show['crypto'] -or $show['metals']) {
+    $prices = Get-CachedPrices
+    if ($show['crypto'] -and $null -ne $prices.btc -and $null -ne $prices.eth) {
+        $segments += (Format-ColorText '93' '₿') + ' ' + (Format-ColorText '93' ('{0:N0}' -f $prices.btc)) + '  ' +
+            (Format-ColorText '94' 'Ξ') + ' ' + (Format-ColorText '94' ('{0:N0}' -f $prices.eth))
+    }
+    if ($show['metals'] -and $null -ne $prices.gold -and $null -ne $prices.silver) {
+        $segments += (Format-ColorText '33' '🥇') + ' ' + (Format-ColorText '33' ('{0:N0}' -f $prices.gold)) + '  ' +
+            (Format-ColorText '37' '🥈') + ' ' + (Format-ColorText '37' ('{0:N2}' -f $prices.silver))
+    }
+}
+
+if ($show['clock']) { $segments += $time }
 
 # Wrap segments onto additional lines when they don't fit in the terminal width. Claude
 # Code sets COLUMNS/LINES on the environment before running this script specifically so
