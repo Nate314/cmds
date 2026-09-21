@@ -1,4 +1,6 @@
-# DESCRIPTION: List all available commands and what they do
+# DESCRIPTION: List all available commands and what they do (-Border draws a rounded box around the list)
+
+param([switch]$Border)
 
 . (Join-Path $PSScriptRoot '_common.ps1')
 
@@ -53,18 +55,38 @@ $descWidth = if ($configuredDescriptions) {
     0
 }
 
-foreach ($cmd in $commands) {
+# Build each row as rendered text (with link/color codes) plus its visible length, so the
+# border can pad to the widest row without the invisible escape sequences skewing widths.
+$rows = foreach ($cmd in $commands) {
     # Pad the plain name to column width first, then wrap the padded (already-aligned)
     # string in the link/color codes, so the invisible escape sequences don't throw off
     # PadRight's width calculation.
     $namePadded = $cmd.Command.PadRight($nameWidth)
-    $nameLink = Format-Hyperlink (ConvertTo-FileUri $cmd.LinkTarget) (Format-ColorText '96' $namePadded)
-    Write-Host $nameLink -NoNewline
+    $text = Format-Hyperlink (ConvertTo-FileUri $cmd.LinkTarget) (Format-ColorText '96' $namePadded)
+    $visible = $namePadded.Length
 
     if ($cmd.Config) {
-        Write-Host $cmd.Description.PadRight($descWidth) -NoNewline
-        Write-Host "-> $($cmd.Config)" -ForegroundColor DarkGray
+        $descPadded = $cmd.Description.PadRight($descWidth)
+        $configText = "-> $($cmd.Config)"
+        $text += $descPadded + (Format-ColorText '90' $configText)
+        $visible += $descPadded.Length + $configText.Length
     } else {
-        Write-Host $cmd.Description
+        $text += $cmd.Description
+        $visible += $cmd.Description.Length
     }
+    [PSCustomObject]@{ Text = $text; Visible = $visible }
 }
+
+if (-not $Border) {
+    $rows | ForEach-Object { Write-Host $_.Text }
+    return
+}
+
+$inner = ($rows | Measure-Object -Maximum -Property Visible).Maximum
+$horizontal = [string][char]0x2500 * ($inner + 2)
+$vertical = [char]0x2502
+Write-Host "$([char]0x256D)$horizontal$([char]0x256E)"
+foreach ($row in $rows) {
+    Write-Host "$vertical $($row.Text)$(' ' * ($inner - $row.Visible)) $vertical"
+}
+Write-Host "$([char]0x2570)$horizontal$([char]0x256F)"

@@ -95,7 +95,10 @@ Lists every available command in a table: its name (Ctrl+click to open that comm
 
 ```
 cmds
+cmds -Border
 ```
+
+Pass `-Border` to draw a rounded box around the list. The box is as wide as the longest row, so use a wide terminal; narrower ones will wrap the lines and break the box.
 
 ## Claude Code plugins
 
